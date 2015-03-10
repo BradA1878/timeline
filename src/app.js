@@ -39,6 +39,7 @@
         this.model = new TimeLineModel(data);
         this.duration = (this.model.getAge() * 2);
         var _classScope = this;
+        if(!this.buttonElement) alert("The Button Element is not defined!");
         var _setState = function(state){
             _classScope.buttonElement.value = state;
         };
@@ -58,15 +59,20 @@
             }
         };
         _setState(TimeLine.PLAY);
-        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_PLAY, this, "play"));
-        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_PAUSE, this, "pause"));
-        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_RESET, this, "initTimer"));
+        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_PLAY, this, this.play));
+        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_PAUSE, this, this.pause));
+        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_RESET, this, this.initTimer));
         this.initTextDisplays();
         this.initOutput();
         this.initTimer();
     };
     TimeLine.prototype.initTextDisplays = function(){
-        this.nameDivElement.innerHTML = this.model.getFullName() + "'s Timeline";
+        if(this.nameDivElement){
+            this.nameDivElement.innerHTML = this.model.getFullName() + "'s Timeline";
+        }else{
+            alert("Name Element is not defined!");
+            return;
+        }
         var div = this.ageDivElement;
         var obj = {
             onTimer: function(timerData){
@@ -76,13 +82,17 @@
                 div.innerHTML = "Current Age: 0";
             }
         };
-        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_TIMER, obj, "onTimer"));
-        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_RESET, obj, "onReset"));
+        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_TIMER, obj, obj.onTimer));
+        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_RESET, obj, obj.onReset));
     };
     TimeLine.prototype.initOutput = function(){
-        var tlOutput = new TimeLineOutput(this.outputElement);
-        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_UPDATE, tlOutput, "onUpdate"));
-        this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_RESET, tlOutput, "onReset"));
+        if(this.outputElement){
+            var tlOutput = new TimeLineOutput(this.outputElement);
+            this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_UPDATE, tlOutput, tlOutput.onUpdate));
+            this.subscribe(new TimeLineEvent(TimeLineEvent.EVENT_RESET, tlOutput, tlOutput.onReset));
+        }else{
+            alert("Text Area Element is no defined!");
+        }
     };
     TimeLine.prototype.initTimer = function(){
         var _classScope = this;
@@ -99,7 +109,7 @@
         var interval = window.setInterval(function(){
             if(_classScope.playState == false) return;
             millisecondCount++;
-            if(millisecondCount >= 9){
+            if(millisecondCount >= 199){
                 millisecondCount = 0;
                 secondCount++;
             }
@@ -112,7 +122,7 @@
                 window.clearInterval(interval);
                 _classScope.onEndOfTimeLine();
             }
-        }, 100);
+        }, 0);
     };
     TimeLine.prototype.play = function(){
         this.playState = true;
@@ -124,47 +134,54 @@
         this.playState = false;
         this.buttonElement.value = TimeLine.RESET;
     };
-    TimeLine.prototype.subscribe = function(timeLineEvent){
-        var eventType = timeLineEvent.getEventType();
+    TimeLine.prototype.observerHash = function(timeLineEvent, eventTypeArg){
+        var eventType;
+        if(timeLineEvent == null){
+            eventType = eventTypeArg;
+        }else{
+            eventType = timeLineEvent.getEventType();
+        }
         if(this.observers.hasOwnProperty(eventType) == false) this.observers[eventType] = [];
-        this.observers[eventType].push(timeLineEvent);
+        return this.observers[eventType];
+    };
+    TimeLine.prototype.subscribe = function(timeLineEvent){
+        this.observerHash(timeLineEvent).push(timeLineEvent);
     };
     TimeLine.prototype.unsubscribe = function(timeLineEvent){
-        var eventType = timeLineEvent.getEventType();
-        if(this.observers.hasOwnProperty(eventType) == false) return;
-        var a = this.observers[eventType];
-        var len = a.length;
-        for(var index = 0; index < len; index++){
-            if(a[index].toString() == timeLineEvent.toString()){
-                this.observers[eventType].splice(index, 1);
-                break;
-            }
-        }
+        this.observerHash(timeLineEvent).forEach(function(item, index, src){
+            src.splice(index, 1);
+            return;
+        });
     };
     TimeLine.prototype.broadcast = function(eventType, data){
-        //console.log("TimeLine.broadcast(" + eventType + ", " + data + ");");
-        if(this.observers.hasOwnProperty(eventType) == false) return;
-        var observers = this.observers[eventType];
-        var len = observers.length;
-        for(var index = 0; index < len; index++) observers[index].notify(data);
+        this.observerHash(null, eventType).forEach(function(item, index, src){
+            src[index].notify(data);
+        });
     };
     TimeLine.prototype.destroy = function(){
         for(var prop in this.observers){
-            var observerArray = this.observers[prop];
-            var len = observerArray.length;
-            for(var index = 0; index < len; index++) observerArray[index].destroy();
+            if(this.observerHash.hasOwnProperty(prop.toString()) == false) continue;
+            var observerArray =  this.observerHash(prop.toString())
+            observerArray.forEach(function(item, index, src){
+                src[index].destroy();
+            });
             observerArray.splice(0);
             observerArray = null;
-            this.observers[prop] = null;
         }
+        this.buttonElement.onclick = null;
+        this.outputElement = null;
+        this.buttonElement = null;
+        this.nameDivElement = null;
+        this.ageDivElement = null;
+        this.observers = null;
+        this.duration = 0;
+        this.model = null;
     };
 
-    var TimeLineEvent = function(type, owner, ownerFunctionName){
+    var TimeLineEvent = function(type, owner, ownerFunction){
         var randomNum = Math.floor((Math.random() * Math.random()) * 100);
-        this.id = (type + "_" + ownerFunctionName + "_" + randomNum);
         this.eventType = type;
-        this.eventOwner = owner;
-        this.eventOwnerFunctionName = ownerFunctionName;
+        this.callBack = ownerFunction.bind(owner);
     };
     TimeLineEvent.EVENT_PLAY = "PlayEvent";
     TimeLineEvent.EVENT_PAUSE = "PauseEvent";
@@ -174,21 +191,13 @@
     TimeLineEvent.prototype.getEventType = function(){
         return this.eventType;
     };
-    TimeLineEvent.prototype.getEventData = function(){
-        return this.eventData;
-    };
     TimeLineEvent.prototype.notify = function(data){
-        this.eventOwner[this.eventOwnerFunctionName](data);
+        this.callBack(data);
     };
     TimeLineEvent.prototype.destroy = function(){
         this.id = null;
         this.eventType = null;
-        this.eventOwner = null;
-        this.eventOwnerFunctionName = null;
-        this.eventData = null;
-    };
-    TimeLineEvent.prototype.toString = function(){
-        return "TimeLineEvent{" + this.id + "}";
+        this.callBack = null;
     };
 
     var TimeLineModel = function(data){
