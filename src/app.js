@@ -9,6 +9,7 @@
         this.duration = 0;
         this.model = null;
         this.playState = false;
+        this.interval = 0;
         var _classScope = this;
         var _loadData = function(arg, callBack){
             var request = new XMLHttpRequest();
@@ -106,7 +107,7 @@
         var secondCount = 0;
         var milestoneInterval = Math.floor(this.duration/len);
         var currentEventIndex = 0;
-        var interval = window.setInterval(function(){
+        this.interval = window.setInterval(function(){
             if(_classScope.playState == false) return;
             millisecondCount++;
             if(millisecondCount >= 199){
@@ -119,7 +120,7 @@
                 currentEventIndex++;
             }
             if(currentEventIndex >= len){
-                window.clearInterval(interval);
+                window.clearInterval(_classScope.interval);
                 _classScope.onEndOfTimeLine();
             }
         }, 0);
@@ -159,6 +160,7 @@
         });
     };
     TimeLine.prototype.destroy = function(){
+        window.clearInterval(this.interval);
         for(var prop in this.observers){
             if(this.observerHash.hasOwnProperty(prop.toString()) == false) continue;
             var observerArray =  this.observerHash(prop.toString())
